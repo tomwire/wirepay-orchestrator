@@ -1,0 +1,38 @@
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+wirepay-*
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go build artifacts
+vendor/
+.out/
+
+# Docker
+docker-compose.override.yml
+
+# Environment (keep .env.example tracked, not actual .env)
+.env
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp

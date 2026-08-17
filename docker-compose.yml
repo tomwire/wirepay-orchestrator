@@ -1,0 +1,159 @@
+# WirePay Orchestrator - Local development stack
+# Thomas Wire <tom@thomaswire.com>
+#
+# Components:
+#   PostgreSQL 16, Redis 7, Zookeeper + Kafka (confluent-kafka:5.6.3)
+#   wire-order, wire-inventory, wire-payment, wire-notification, wire-ledger
+#
+# Usage:
+#   docker compose up -d          # start infra only (no rebuild)
+#   docker compose up -d --build  # rebuild all services
+#   docker compose logs -f        # tail all logs
+
+services:
+  # ==========================================================
+  # Infrastructure
+  # ==========================================================
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: wpo
+      POSTGRES_PASSWORD: "wpo_dev_password"
+      POSTGRES_DB: wirepay
+    ports:
+      - "54320:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wpo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "63790:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "21810:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9092:9092"
+
+  # ==========================================================
+  # WPO Services
+  # ==========================================================
+  wire-order:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: wire-order
+    environment:
+      SERVICE_PORT: 8081
+      DATABASE_URL: postgres://wpo:wpo_dev_password@postgres:5432/wirepay?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:   { condition: service_healthy }
+      kafka:   { condition: service_started }
+
+  wire-inventory:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: wire-inventory
+    environment:
+      SERVICE_PORT: 8082
+      DATABASE_URL: postgres://wpo:wpo_dev_password@postgres:5432/wirepay?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8082:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:   { condition: service_healthy }
+      kafka:   { condition: service_started }
+
+  wire-payment:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: wire-payment
+    environment:
+      SERVICE_PORT: 8083
+      DATABASE_URL: postgres://wpo:wpo_dev_password@postgres:5432/wirepay?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      STRIPE_MOCK_MODE: "true"
+    ports:
+      - "8083:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:   { condition: service_healthy }
+      kafka:   { condition: service_started }
+
+  wire-notification:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: wire-notification
+    environment:
+      SERVICE_PORT: 8084
+      DATABASE_URL: postgres://wpo:wpo_dev_password@postgres:5432/wirepay?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8084:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:   { condition: service_healthy }
+      kafka:   { condition: service_started }
+
+  wire-ledger:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: wire-ledger
+    environment:
+      SERVICE_PORT: 8085
+      DATABASE_URL: postgres://wpo:wpo_dev_password@postgres:5432/wirepay?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8085:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:   { condition: service_healthy }
+      kafka:   { condition: service_started }
+
+volumes:
+  pgdata:
+    driver: local

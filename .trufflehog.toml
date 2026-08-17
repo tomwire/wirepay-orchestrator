@@ -1,0 +1,8 @@
+[exclude]
+paths = [
+    "vendor/",
+    ".terraform/",
+    "k8s-manifests/cert-manager/",
+    "k8s-manifests/grafana/",
+    "data/"
+]
